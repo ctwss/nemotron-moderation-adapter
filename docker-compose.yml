@@ -1,0 +1,19 @@
+services:
+  nemotron-moderation-adapter:
+    build: .
+    image: nemotron-moderation-adapter:latest
+    environment:
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_API_KEYS: ${NVIDIA_API_KEYS:-}
+      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-https://integrate.api.nvidia.com}
+      LISTEN_PORT: 8080
+      TIMEOUT_SEC: ${TIMEOUT_SEC:-30}
+    ports:
+      - "${LISTEN_PORT:-8080}:8080"
+    healthcheck:
+      test: [ "CMD", "/nemotron-moderation-adapter", "healthcheck" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
