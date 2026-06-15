@@ -3,8 +3,11 @@ package adapter
 import "encoding/json"
 
 const (
-	NVIDIAModel = "nvidia/nemotron-3.5-content-safety"
-	OpenAIModel = "omni-moderation-latest"
+	DefaultNVIDIATextModel        = "nvidia/llama-3.1-nemotron-safety-guard-8b-v3"
+	DefaultNVIDIAMultimodalModel  = "nvidia/nemotron-3.5-content-safety"
+	DefaultNVIDIAAdjudicatorModel = "nvidia/nemotron-content-safety-reasoning-4b"
+	DefaultOpenAIBaseURL          = "https://api.openai.com"
+	OpenAIModel                   = "omni-moderation-latest"
 )
 
 var OpenAICategories = []string{
@@ -59,7 +62,7 @@ type NVIDIARequest struct {
 	Temperature        float64                `json:"temperature"`
 	TopP               float64                `json:"top_p"`
 	Stream             bool                   `json:"stream"`
-	ChatTemplateKwargs map[string]interface{} `json:"chat_template_kwargs"`
+	ChatTemplateKwargs map[string]interface{} `json:"chat_template_kwargs,omitempty"`
 }
 
 type NVIDIAMessage struct {
@@ -90,4 +93,30 @@ type ParsedSafety struct {
 	Categories    []string
 	RawOutput     string
 	ParseDegraded bool
+}
+
+type AdjudicationInput struct {
+	UserText          string
+	HasImage          bool
+	PrimaryRawOutput  string
+	PrimaryCategories []string
+	BusinessContext   bool
+}
+
+type AdjudicationResult struct {
+	Decision   string   `json:"decision"`
+	RiskLevel  string   `json:"risk_level"`
+	Reason     string   `json:"reason"`
+	Categories []string `json:"categories"`
+	RawOutput  string   `json:"-"`
+}
+
+type OpenAIRecheckOutcome struct {
+	Applied       bool
+	CacheHit      bool
+	ID            string
+	Status        int
+	Result        ModerationResult
+	SkippedReason string
+	Err           error
 }

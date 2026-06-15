@@ -82,3 +82,19 @@ func TestParseSafetyOutputDegradedUnsafe(t *testing.T) {
 		t.Fatal("expected degraded parse")
 	}
 }
+
+func TestParseAdjudicationOutputMarkdownJSON(t *testing.T) {
+	got, err := ParseAdjudicationOutput("```json\n{\"decision\":\"allow\",\"risk_level\":\"none\",\"reason\":\"benign\",\"categories\":[]}\n```")
+	if err != nil {
+		t.Fatalf("parse adjudication: %v", err)
+	}
+	if got.Decision != "allow" || got.RiskLevel != "none" || got.Reason != "benign" {
+		t.Fatalf("unexpected adjudication result: %#v", got)
+	}
+}
+
+func TestParseAdjudicationOutputRejectsInvalidDecision(t *testing.T) {
+	if _, err := ParseAdjudicationOutput(`{"decision":"maybe","risk_level":"low","reason":"no","categories":[]}`); err == nil {
+		t.Fatal("expected invalid decision error")
+	}
+}

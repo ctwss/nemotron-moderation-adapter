@@ -6,8 +6,19 @@ services:
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       NVIDIA_API_KEYS: ${NVIDIA_API_KEYS:-}
       NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-https://integrate.api.nvidia.com}
+      NVIDIA_MODEL: ${NVIDIA_MODEL:-nvidia/llama-3.1-nemotron-safety-guard-8b-v3}
+      NVIDIA_MULTIMODAL_MODEL: ${NVIDIA_MULTIMODAL_MODEL:-nvidia/nemotron-3.5-content-safety}
+      NVIDIA_ADJUDICATOR_MODEL: ${NVIDIA_ADJUDICATOR_MODEL:-nvidia/nemotron-content-safety-reasoning-4b}
+      ENABLE_ADJUDICATION: ${ENABLE_ADJUDICATION:-true}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
+      OPENAI_MODEL: ${OPENAI_MODEL:-omni-moderation-latest}
+      ENABLE_OPENAI_RECHECK: ${ENABLE_OPENAI_RECHECK:-true}
+      OPENAI_CACHE_TTL_SEC: ${OPENAI_CACHE_TTL_SEC:-3600}
+      OPENAI_CACHE_MAX_ENTRIES: ${OPENAI_CACHE_MAX_ENTRIES:-2048}
       LISTEN_PORT: 8080
       TIMEOUT_SEC: ${TIMEOUT_SEC:-30}
+      UNSAFE_NO_CATEGORY_FALLBACK: ${UNSAFE_NO_CATEGORY_FALLBACK:-true}
     ports:
       - "${LISTEN_PORT:-8080}:8080"
     healthcheck:

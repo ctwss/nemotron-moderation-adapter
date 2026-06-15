@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"encoding/json"
+	"errors"
 	"regexp"
 	"strings"
 )
@@ -36,6 +37,50 @@ func ParseSafetyOutput(content string) ParsedSafety {
 	parsed := parseSafetyText(content)
 	parsed.RawOutput = content
 	return parsed
+}
+
+func ParseAdjudicationOutput(content string) (AdjudicationResult, error) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return AdjudicationResult{}, errors.New("empty adjudication output")
+	}
+
+	if result, ok := parseAdjudicationJSON(content); ok {
+		result.RawOutput = content
+		return result, nil
+	}
+	if match := fencedJSONPattern.FindStringSubmatch(content); len(match) == 2 {
+		if result, ok := parseAdjudicationJSON(match[1]); ok {
+			result.RawOutput = content
+			return result, nil
+		}
+	}
+	if jsonObject := extractJSONObject(content); jsonObject != "" {
+		if result, ok := parseAdjudicationJSON(jsonObject); ok {
+			result.RawOutput = content
+			return result, nil
+		}
+	}
+
+	return AdjudicationResult{RawOutput: content}, errors.New("invalid adjudication JSON")
+}
+
+func parseAdjudicationJSON(content string) (AdjudicationResult, bool) {
+	var result AdjudicationResult
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		return AdjudicationResult{}, false
+	}
+	result.Decision = strings.ToLower(strings.TrimSpace(result.Decision))
+	result.RiskLevel = strings.ToLower(strings.TrimSpace(result.RiskLevel))
+	if result.Decision != "allow" && result.Decision != "block" {
+		return AdjudicationResult{}, false
+	}
+	switch result.RiskLevel {
+	case "", "none", "low", "medium", "high":
+	default:
+		return AdjudicationResult{}, false
+	}
+	return result, true
 }
 
 func parseSafetyJSON(content string) (ParsedSafety, bool) {

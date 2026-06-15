@@ -48,20 +48,52 @@ func TestMapSafetyDuplicateTargetsKeepHighest(t *testing.T) {
 	}
 }
 
-func TestMapSafetyUnknownFallsBackToViolence(t *testing.T) {
-	result, audit := MapSafetyWithAudit(ParsedSafety{Unsafe: true, Categories: []string{"Unmapped Category"}})
+func TestMapSafetyKnownAndUnknownCategoriesOnlyKnownCategoryBlocks(t *testing.T) {
+	result, audit := MapSafetyWithAudit(ParsedSafety{Unsafe: true, Categories: []string{"Needs Caution", "Malware"}})
 
-	if !result.Categories["violence"] {
-		t.Fatal("expected violence fallback")
+	if !result.Flagged || !result.Categories["illicit"] {
+		t.Fatalf("expected malware to flag illicit: %#v", result)
 	}
-	if result.CategoryScores["violence"] != 0.99 {
-		t.Fatalf("expected score 0.99, got %v", result.CategoryScores["violence"])
+	if result.Categories["violence"] {
+		t.Fatalf("unknown category must not fallback to violence: %#v", result.Categories)
 	}
-	if len(audit.UnknownCategories) != 1 || audit.UnknownCategories[0] != "Unmapped Category" {
-		t.Fatalf("unexpected unknown category audit: %#v", audit.UnknownCategories)
+	if len(audit.UnknownCategories) != 1 || audit.UnknownCategories[0] != "Needs Caution" {
+		t.Fatalf("unexpected unknown category audit: %#v", audit)
 	}
-	if len(audit.WeakMappings) != 1 || audit.WeakMappings[0].Confidence != MappingConfidenceFallback {
-		t.Fatalf("expected fallback mapping audit, got %#v", audit.WeakMappings)
+	if audit.RiskLevel != RiskLevelStrong {
+		t.Fatalf("expected strong risk level: %#v", audit)
+	}
+}
+
+func TestMapSafetyUnknownCategoriesAreAuditOnly(t *testing.T) {
+	cases := []string{"Unmapped Category", "Unauthorized Advice", "Needs Caution"}
+
+	for _, aegis := range cases {
+		result, audit := MapSafetyWithAudit(ParsedSafety{Unsafe: true, Categories: []string{aegis}})
+
+		if result.Flagged {
+			t.Fatalf("%s: expected audit-only result, got flagged", aegis)
+		}
+		for _, category := range OpenAICategories {
+			if result.Categories[category] {
+				t.Fatalf("%s: expected %s false", aegis, category)
+			}
+			if result.CategoryScores[category] != SafeCategoryScore {
+				t.Fatalf("%s: expected %s score SafeCategoryScore, got %v", aegis, category, result.CategoryScores[category])
+			}
+		}
+		if len(audit.UnknownCategories) != 1 || audit.UnknownCategories[0] != aegis {
+			t.Fatalf("%s: unexpected unknown category audit: %#v", aegis, audit.UnknownCategories)
+		}
+		if !audit.SuppressedUnknownCategory {
+			t.Fatalf("%s: expected suppressed unknown category audit: %#v", aegis, audit)
+		}
+		if audit.UnknownCategoryPolicy != UnknownCategoryPolicyAuditOnly {
+			t.Fatalf("%s: expected audit-only policy, got %#v", aegis, audit)
+		}
+		if audit.RiskLevel != RiskLevelUnknownSuppressed {
+			t.Fatalf("%s: expected unknown suppressed risk, got %#v", aegis, audit)
+		}
 	}
 }
 
@@ -77,6 +109,31 @@ func TestMapSafetyUnsafeWithoutCategoriesFallsBackToViolence(t *testing.T) {
 	if !audit.FallbackCategory {
 		t.Fatalf("expected fallback audit: %#v", audit)
 	}
+	if audit.UnknownCategoryPolicy != UnknownCategoryPolicyFallbackToViolence {
+		t.Fatalf("expected fallback policy: %#v", audit)
+	}
+	if audit.RiskLevel != RiskLevelFallback {
+		t.Fatalf("expected fallback risk level: %#v", audit)
+	}
+}
+
+func TestMapSafetyUnsafeWithoutCategoriesFallbackCanBeDisabled(t *testing.T) {
+	result, audit := MapSafetyWithAuditOptions(ParsedSafety{Unsafe: true}, MappingOptions{})
+
+	if result.Flagged {
+		t.Fatalf("expected unflagged result when fallback is disabled: %#v", result)
+	}
+	for _, category := range OpenAICategories {
+		if result.Categories[category] {
+			t.Fatalf("expected %s false", category)
+		}
+	}
+	if audit.FallbackCategory {
+		t.Fatalf("did not expect fallback audit: %#v", audit)
+	}
+	if audit.RiskLevel != RiskLevelUnknownSuppressed {
+		t.Fatalf("expected unknown suppressed risk level: %#v", audit)
+	}
 }
 
 func TestMapSafetyWeakMappingAudit(t *testing.T) {
@@ -87,6 +144,9 @@ func TestMapSafetyWeakMappingAudit(t *testing.T) {
 	}
 	if len(audit.WeakMappings) != 2 {
 		t.Fatalf("expected two weak mappings, got %#v", audit.WeakMappings)
+	}
+	if audit.RiskLevel != RiskLevelWeak {
+		t.Fatalf("expected weak risk level, got %#v", audit)
 	}
 	for _, mapping := range audit.WeakMappings {
 		if mapping.Confidence != MappingConfidenceWeak {
@@ -105,8 +165,8 @@ func TestMapSafetySafeDefaults(t *testing.T) {
 		if result.Categories[category] {
 			t.Fatalf("expected %s false", category)
 		}
-		if result.CategoryScores[category] != 0.01 {
-			t.Fatalf("expected %s score 0.01, got %v", category, result.CategoryScores[category])
+		if result.CategoryScores[category] != SafeCategoryScore {
+			t.Fatalf("expected %s score SafeCategoryScore, got %v", category, result.CategoryScores[category])
 		}
 		if len(result.CategoryAppliedInputTypes[category]) != 1 || result.CategoryAppliedInputTypes[category][0] != "text" {
 			t.Fatalf("unexpected applied input types for %s: %#v", category, result.CategoryAppliedInputTypes[category])

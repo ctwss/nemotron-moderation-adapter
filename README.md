@@ -198,8 +198,19 @@ This service exposes `POST /v1/moderations`, accepts OpenAI-style moderation inp
 | `NVIDIA_API_KEY` | empty | Single fallback NVIDIA API key. Used when the incoming request has no bearer token. |
 | `NVIDIA_API_KEYS` | empty | Comma-separated fallback NVIDIA API keys. Takes precedence over `NVIDIA_API_KEY`. |
 | `NVIDIA_BASE_URL` | `https://integrate.api.nvidia.com` | NVIDIA API base URL. |
+| `NVIDIA_MODEL` | `nvidia/llama-3.1-nemotron-safety-guard-8b-v3` | Primary model for text-only moderation requests. |
+| `NVIDIA_MULTIMODAL_MODEL` | `nvidia/nemotron-3.5-content-safety` | Fallback model for requests containing `image_url` content parts. |
+| `NVIDIA_ADJUDICATOR_MODEL` | `nvidia/nemotron-content-safety-reasoning-4b` | Low-frequency adjudication model for business/development false positives. |
+| `ENABLE_ADJUDICATION` | `true` | Enables second-pass adjudication for controversial categories in business context. |
+| `OPENAI_API_KEY` | empty | Optional OpenAI API key used only for second-pass recheck after a result is already flagged. |
+| `OPENAI_BASE_URL` | `https://api.openai.com` | OpenAI API base URL. |
+| `OPENAI_MODEL` | `omni-moderation-latest` | OpenAI moderation model used for recheck. |
+| `ENABLE_OPENAI_RECHECK` | `true` | Enables OpenAI recheck for final flagged results when `OPENAI_API_KEY` is configured. |
+| `OPENAI_CACHE_TTL_SEC` | `3600` | In-memory TTL for successful OpenAI recheck responses. |
+| `OPENAI_CACHE_MAX_ENTRIES` | `2048` | Maximum number of successful OpenAI recheck responses cached in memory. |
 | `LISTEN_PORT` | `8080` | HTTP listen port. |
 | `TIMEOUT_SEC` | `30` | Upstream request timeout in seconds. |
+| `UNSAFE_NO_CATEGORY_FALLBACK` | `true` | When Nemotron says unsafe but provides no category, fallback to `violence=0.99`. Unknown named categories remain audit-only. |
 
 Incoming bearer tokens are preferred. If a request includes:
 
@@ -208,6 +219,8 @@ Authorization: Bearer nvapi-...
 ```
 
 the adapter forwards that key to NVIDIA. If no bearer token is provided, the service uses `NVIDIA_API_KEYS` or `NVIDIA_API_KEY`.
+
+`OPENAI_API_KEY` is never read from the incoming request. When configured, the adapter calls OpenAI only after the NVIDIA/adjudication path would otherwise return `flagged=true`. If OpenAI returns successfully, that OpenAI moderation result becomes the final response. If the key is missing, invalid, rate-limited, times out, or OpenAI returns an invalid response, the adapter keeps the existing NVIDIA result and does not return a 502 to the caller. A 401/403 from OpenAI disables OpenAI rechecks for the current process until restart.
 
 ### Run Locally
 
@@ -332,4 +345,6 @@ make docker-build
 
 ### Notes
 
-Category mapping is implemented in `internal/adapter/mapper.go`. Strong mappings are mapped directly to OpenAI moderation categories; weak or unknown mappings are included in request logs for auditability.
+Text-only requests use `NVIDIA_MODEL`; multimodal requests containing `image_url` use `NVIDIA_MULTIMODAL_MODEL`. Category mapping is implemented in `internal/adapter/mapper.go`. Strong and weak known mappings are mapped to OpenAI moderation categories. Unknown Nemotron categories are audit-only by default and are not forced into `violence`.
+
+When `ENABLE_ADJUDICATION=true`, unsafe results in business/development context that only hit controversial categories such as `Fraud/Deception`, `Criminal Planning/Confessions`, `Illegal Activity`, `PII/Privacy`, or `Manipulation` are sent to `NVIDIA_ADJUDICATOR_MODEL`. An adjudication `allow` response suppresses the outward OpenAI moderation flag while preserving audit logs; adjudication errors fail closed to the primary model result.
